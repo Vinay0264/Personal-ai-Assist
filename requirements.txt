@@ -1,0 +1,13 @@
+google-genai # Google Gemini AI API client
+SpeechRecognition  # Voice recognition (Google Speech API - FREE)
+pyaudio  # Audio input from microphone (Required for SpeechRecognition)
+python-dotenv #For loading API keys from .env file
+Edge-TTS # Microsoft Edge Text-to-Speech (FREE, high quality)
+pygame  # For playing audio (used with Edge-TTS)
+
+
+
+
+pyaudio #(FAILED - Windows installation issues)
+gTTS #(FAILED - Google Text-to-Speech API, requires internet connection and some errors occurred)
+pyttsx3 #(FAILED - Windows bug)
