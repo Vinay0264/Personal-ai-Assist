@@ -8,6 +8,8 @@ import pygame
 from dotenv import load_dotenv
 import tempfile
 import time
+import keyboard  # For detecting key press/release
+import threading  # For handling async key detection
 
 # ===== LOAD ENVIRONMENT VARIABLES =====
 load_dotenv()
@@ -57,40 +59,72 @@ def get_input_choice():
         print("❌ Invalid choice. Please enter 1 or 2.")
 
 def listen():
-    """Listen to user's voice - captures full sentence with natural pauses"""
+    """Listen using push-to-talk (Press Space to start/stop)"""
+    print("\n" + "=" * 60)
+    print("🎤 PUSH-TO-TALK MODE")
+    print("=" * 60)
+    print("👉 Press SPACE BAR once to START speaking")
+    print("👉 Press SPACE BAR again to STOP")
+    print("=" * 60)
+    
+    print("\n⏸️  Press SPACE BAR to start recording...")
+    keyboard.wait('space')
+    time.sleep(0.1)
+    
     with sr.Microphone() as source:
-        print("\n🎤 Listening... (Speak naturally, I'll know when you're done!)")
+        print("\n🔴 RECORDING... Press SPACE BAR again when done!")
+        print("=" * 60)
         
-        # Adjust for ambient noise
-        recognizer.adjust_for_ambient_noise(source, duration=0.5)
-        
-        # CRITICAL: Lower energy threshold so it captures softer speech
-        recognizer.energy_threshold = 200  # Lower = more sensitive
+        recognizer.adjust_for_ambient_noise(source, duration=0.3)
+        recognizer.energy_threshold = 200
         recognizer.dynamic_energy_threshold = True
         
-        # Lower pause threshold - wait 2 seconds of silence before stopping
-        recognizer.pause_threshold = 2.0  # Wait 2 seconds of silence (default is 0.8)
+        stop_recording = threading.Event()
+        
+        def wait_for_space():
+            keyboard.wait('space')
+            stop_recording.set()
+        
+        space_thread = threading.Thread(target=wait_for_space, daemon=True)
+        space_thread.start()
+        
+        audio_data = []
         
         try:
-            # timeout: 30 seconds to START speaking
-            # phrase_time_limit: None = no limit (will stop after pause_threshold seconds of silence)
-            audio = recognizer.listen(
-                source, 
-                timeout=30,
-                phrase_time_limit=None  # No time limit - will stop after 2 sec silence
-            )
+            print("🎙️  Speak now...")
+            start_time = time.time()
+            max_duration = 30
+            
+            while not stop_recording.is_set():
+                if time.time() - start_time > max_duration:
+                    print("\n⏱️  Maximum recording time reached (30 seconds)")
+                    break
+                
+                try:
+                    audio = recognizer.listen(source, timeout=0.5, phrase_time_limit=1)
+                    audio_data.append(audio.get_raw_data())
+                except sr.WaitTimeoutError:
+                    continue
+            
+            print("⏹️  Recording stopped!")
+            
+            if not audio_data:
+                print("❌ No audio recorded. Please try again.")
+                return None
             
             print("🔄 Processing speech...")
-            text = recognizer.recognize_google(audio)
-            print(f"✅ You said: {text}")
+            
+            sample_rate = source.SAMPLE_RATE
+            sample_width = source.SAMPLE_WIDTH
+            combined_data = b''.join(audio_data)
+            audio_full = sr.AudioData(combined_data, sample_rate, sample_width)
+            
+            text = recognizer.recognize_google(audio_full)
+            print(f"✅ You said: {text}\n")
             return text
             
-        except sr.WaitTimeoutError:
-            print("⏱️ No speech detected for 30 seconds. Returning to menu...")
-            return "quit"  # Auto-quit if no input for 30 seconds
-            
         except sr.UnknownValueError:
-            print("❌ Couldn't understand. Please try again.")
+            print("❌ Couldn't understand. Please speak more clearly.")
             return None
             
         except Exception as e:
@@ -223,7 +257,7 @@ def main():
             
             print(f"\n✅ {'Voice' if choice == '1' else 'Text'} mode activated!")
             if choice == '1':
-                print(f"💡 Speak naturally - I'll wait 2 seconds of silence before processing")
+                print(f"💡 Press SPACE BAR to start/stop recording")
                 print(f"💡 Say 'bye', 'goodbye', 'quit', or 'stop' to switch modes")
             else:
                 print(f"💡 Type 'quit', 'bye', 'goodbye', or 'exit' to switch modes")
