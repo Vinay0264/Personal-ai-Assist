@@ -11,3 +11,51 @@ keyboard # For detecting space bar presses in voice mode
 pyaudio #(FAILED - Windows installation issues)
 gTTS #(FAILED - Google Text-to-Speech API, requires internet connection and some errors occurred)
 pyttsx3 #(FAILED - Windows bug)
+
+
+
+def speak(text):
+    """Display text AND speak using Edge-TTS"""
+    print("\n" + "=" * 60)
+    print(f"🤖 SAIYAARA: {text}")
+    print("=" * 60)
+    
+    temp_filename = None
+    
+    try:
+        print("🔊 Starting speech synthesis...")
+        
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.mp3')
+        temp_filename = temp_file.name
+        temp_file.close()
+        
+        asyncio.run(_generate_speech(text, temp_filename))
+        
+        print("🎵 Playing audio...")
+        
+        if not pygame.mixer.get_init():
+            pygame.mixer.init()
+        
+        pygame.mixer.music.load(temp_filename)
+        pygame.mixer.music.play()
+        
+        while pygame.mixer.music.get_busy():
+            time.sleep(0.1)
+        
+        pygame.mixer.music.unload()
+        os.unlink(temp_filename)
+        
+        print("✅ Speech complete!\n")
+        
+    except KeyboardInterrupt:
+        print("\n⏹️ Speech stopped by user!")
+        pygame.mixer.music.stop()
+        if temp_filename and os.path.exists(temp_filename):
+            os.unlink(temp_filename)
+    except Exception as e:
+        print(f"❌ Speech error: {e}")
+        if temp_filename and os.path.exists(temp_filename):
+            try:
+                os.unlink(temp_filename)
+            except:
+                pass

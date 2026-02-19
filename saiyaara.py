@@ -195,34 +195,66 @@ async def _generate_speech(text, output_file):
     await communicate.save(output_file)
 
 def speak(text):
-    """Display text AND speak using Edge-TTS"""
-    print("\n" + "=" * 60)
-    print(f"🤖 SAIYAARA: {text}")
-    print("=" * 60)
-    
+    """Display text word-by-word AND speak using Edge-TTS"""
     temp_filename = None
     
     try:
-        print("🔊 Starting speech synthesis...")
-        
+        # Generate speech first
         temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.mp3')
         temp_filename = temp_file.name
         temp_file.close()
         
         asyncio.run(_generate_speech(text, temp_filename))
         
-        print("🎵 Playing audio...")
-        
+        # Initialize pygame mixer
         if not pygame.mixer.get_init():
             pygame.mixer.init()
         
+        # Load the audio to get duration
         pygame.mixer.music.load(temp_filename)
+        
+        # Get audio duration using pygame
+        sound = pygame.mixer.Sound(temp_filename)
+        audio_duration = sound.get_length()
+        
+        # Split text into words
+        words = text.split()
+        total_words = len(words)
+        
+        # Calculate time per word
+        time_per_word = audio_duration / total_words if total_words > 0 else 0
+        
+        # Start playing audio
         pygame.mixer.music.play()
         
+        # Display header
+        print("\n" + "=" * 60)
+        print("🤖 SAIYAARA:", end=" ", flush=True)
+        
+        # Display words progressively while audio plays
+        start_time = time.time()
+        
+        for i, word in enumerate(words):
+            # Wait until it's time to show this word
+            target_time = start_time + (i * time_per_word)
+            current_time = time.time()
+            
+            if current_time < target_time:
+                time.sleep(target_time - current_time)
+            
+            # Print word
+            print(word, end=" ", flush=True)
+        
+        print()  # New line after all words
+        print("=" * 60)
+        
+        # Wait for audio to finish
         while pygame.mixer.music.get_busy():
             time.sleep(0.1)
         
+        # Clean up
         pygame.mixer.music.unload()
+        sound = None
         os.unlink(temp_filename)
         
         print("✅ Speech complete!\n")
@@ -305,7 +337,7 @@ def main():
                                 break
                     
                     if should_quit:
-                        speak("Switching modes!")
+                        speak("Nice Talking to you. Take Care.... Switching modes!")
                         print("\n🔄 Returning to input selection...\n")
                         break
                     
