@@ -29,6 +29,14 @@ recognizer = sr.Recognizer()
 conversation_history = []  # Stores current conversation
 MAX_HISTORY = 20  # Keep last 20 messages (10 exchanges)
 
+# Fallback model chain — if one runs out of quota, auto-switch to next
+MODELS = [
+    "gemini-2.5-flash-lite",   # Primary    — 1000 req/day, 15 RPM
+    "gemini-2.5-flash",        # Fallback 1 —  250 req/day, 10 RPM
+    "gemini-2.5-pro",          # Fallback 2 —  100 req/day,  5 RPM
+]
+current_model_index = 0  # Start with flash-lite
+
 print("✅ Using Edge-TTS (Microsoft Edge Text-to-Speech) - Most reliable on Windows!")
 
 # ===== HELPER FUNCTIONS =====
@@ -80,17 +88,21 @@ def listen():
     print("👉 Press SPACE BAR again to STOP")
     print("=" * 60)
 
-    print("\n⏸️  Press SPACE BAR to start recording...")
-    keyboard.wait('space')
-    time.sleep(0.1)
-
     with sr.Microphone() as source:
-        print("\n🔴 RECORDING... Press SPACE BAR again when done!")
-        print("=" * 60)
-
-        recognizer.adjust_for_ambient_noise(source, duration=0.3)
+        # FIX 1: Calibrate BEFORE space press so no delay when you start speaking
+        print("\n🔧 Calibrating microphone...")
+        recognizer.adjust_for_ambient_noise(source, duration=0.5)
         recognizer.energy_threshold = 200
         recognizer.dynamic_energy_threshold = True
+        print("✅ Ready!")
+
+        print("\n⏸️  Press SPACE BAR to start recording...")
+        keyboard.wait('space')
+        time.sleep(0.1)
+
+        print("\n🔴 RECORDING... Press SPACE BAR again when done!")
+        print("=" * 60)
+        print("🎙️  Speak now...")
 
         stop_recording = threading.Event()
 
@@ -104,13 +116,12 @@ def listen():
         audio_data = []
 
         try:
-            print("🎙️  Speak now...")
             start_time = time.time()
-            max_duration = 30
+            max_duration = 60
 
             while not stop_recording.is_set():
                 if time.time() - start_time > max_duration:
-                    print("\n⏱️  Maximum recording time reached (30 seconds)")
+                    print("\n⏱️  Maximum recording time reached (60    seconds)")
                     break
 
                 try:
@@ -118,6 +129,14 @@ def listen():
                     audio_data.append(audio.get_raw_data())
                 except sr.WaitTimeoutError:
                     continue
+
+            # FIX 2: After stop pressed, wait a tiny bit to capture tail end of speech
+            time.sleep(0.5)
+            try:
+                audio = recognizer.listen(source, timeout=0.5, phrase_time_limit=1)
+                audio_data.append(audio.get_raw_data())
+            except:
+                pass  # If nothing left to capture, that's fine
 
             print("⏹️  Recording stopped!")
 
@@ -129,7 +148,7 @@ def listen():
 
             sample_rate = source.SAMPLE_RATE
             sample_width = source.SAMPLE_WIDTH
-            combined_data = b''.join(audio_data)  # FIX: join ALL chunks, not just last
+            combined_data = b''.join(audio_data)
             audio_full = sr.AudioData(combined_data, sample_rate, sample_width)
 
             text = recognizer.recognize_google(audio_full)
@@ -161,8 +180,8 @@ def type_input():
 # ===== AI PROCESSING =====
 
 def think(user_input):
-    """Send to Gemini AI and get response with friendly personality, memory, and auto-retry"""
-    global conversation_history
+    """Send to Gemini AI and get response with friendly personality, memory, auto-retry, and model fallback"""
+    global conversation_history, current_model_index
 
     # System prompt
     system_prompt = """You are SAIYAARA, a friendly AI assistant and companion. 
@@ -200,54 +219,62 @@ Remember: You're not just an assistant, you're a friend."""
     # Build full prompt
     prompt = system_prompt + "\n\nConversation so far:\n" + history_text + "\nSaiyaara:"
 
-    # ===== AUTO-RETRY WITH BACKOFF =====
-    max_retries = 4
-    wait_times = [15, 30, 60, 120]  # seconds to wait on each retry attempt
+    # ===== AUTO-RETRY WITH BACKOFF + MODEL FALLBACK =====
+    max_retries = 3
+    wait_times = [15, 30, 60]  # seconds to wait before retrying same model
 
-    for attempt in range(max_retries):
-        try:
-            print(f"🧠 Thinking{'...' if attempt == 0 else f' (retry {attempt}/{max_retries - 1})...'}")
+    # Try each model in the chain
+    while current_model_index < len(MODELS):
+        model_name = MODELS[current_model_index]
 
-            response = client.models.generate_content(
-                model="gemini-2.5-flash-lite",
-                contents=prompt
-            )
+        for attempt in range(max_retries):
+            try:
+                label = f"🧠 Thinking (model: {model_name})..." if attempt == 0 else f"🧠 Retrying (attempt {attempt + 1}/{max_retries}, model: {model_name})..."
+                print(label)
 
-            clean_response = clean_text_for_speech(response.text.strip())
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=prompt
+                )
 
-            # Add assistant response to history only on success
-            conversation_history.append({
-                "role": "model",
-                "parts": [clean_response]
-            })
+                clean_response = clean_text_for_speech(response.text.strip())
 
-            return clean_response
+                # Add assistant response to history only on success
+                conversation_history.append({
+                    "role": "model",
+                    "parts": [clean_response]
+                })
 
-        except Exception as e:
-            error_msg = str(e)
+                return clean_response
 
-            if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
-                if attempt < max_retries - 1:
-                    wait = wait_times[attempt]
-                    print(f"\n⚠️  Rate limit hit! Waiting {wait} seconds then retrying automatically...")
-                    print(f"   (Attempt {attempt + 1}/{max_retries - 1} — please wait)")
+            except Exception as e:
+                error_msg = str(e)
 
-                    # Countdown so user knows something is happening
-                    for remaining in range(wait, 0, -5):
-                        print(f"   ⏳ Retrying in {remaining}s...", end="\r")
-                        time.sleep(5)
-                    print(" " * 40, end="\r")  # Clear countdown line
+                if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
+                    if attempt < max_retries - 1:
+                        # Still have retries left for this model — wait and retry
+                        wait = wait_times[attempt]
+                        print(f"\n⚠️  Rate limit hit on {model_name}! Waiting {wait}s then retrying...")
+                        for remaining in range(wait, 0, -5):
+                            print(f"   ⏳ Retrying in {remaining}s...", end="\r")
+                            time.sleep(5)
+                        print(" " * 40, end="\r")
+                    else:
+                        # All retries for this model exhausted — switch to next model
+                        current_model_index += 1
+                        if current_model_index < len(MODELS):
+                            next_model = MODELS[current_model_index]
+                            print(f"\n🔄 {model_name} quota exhausted! Switching to {next_model}...")
+                        break  # Break retry loop, outer while will try next model
                 else:
-                    # All retries exhausted
-                    print(f"⚠️  All retries exhausted. Daily quota may be finished.")
-                    # Remove the user message we added since we couldn't get a response
+                    print(f"⚠️ AI Error: {error_msg}")
                     conversation_history.pop()
-                    return "I've hit my request limit for now. Let's continue once the quota resets — should be within an hour!"
-            else:
-                print(f"⚠️ AI Error: {error_msg}")
-                # Remove the user message we added since we couldn't get a response
-                conversation_history.pop()
-                return "Sorry, I'm having some trouble right now. Can you try again?"
+                    return "Sorry, I'm having some trouble right now. Can you try again?"
+
+    # All models exhausted
+    print("⚠️  All models exhausted. Daily quota finished across all models.")
+    conversation_history.pop()
+    return "I've used up all available models for today. Quota resets at midnight Pacific Time — let's continue then!"
 
 # ===== SPEECH OUTPUT =====
 
@@ -290,8 +317,12 @@ def speak(text):
         pygame.mixer.music.play()
 
         print("\n" + "=" * 60)
-        print("🤖 SAIYAARA:", end=" ", flush=True)
+        print("🤖 SAIYAARA:")
 
+        # Word-wrap aware progressive printing
+        # Each line stays within 56 chars so words never break mid-word
+        LINE_WIDTH = 100 # Adjusted for wider console output #56
+        current_line = ""
         start_time = time.time()
 
         for i, word in enumerate(words):
@@ -301,9 +332,20 @@ def speak(text):
             if current_time < target_time:
                 time.sleep(target_time - current_time)
 
-            print(word, end=" ", flush=True)
+            # Check if adding this word exceeds line width
+            test_line = current_line + word + " "
+            if len(test_line) > LINE_WIDTH and current_line:
+                # Print current line and start new one
+                print(current_line)
+                current_line = word + " "
+            else:
+                current_line = test_line
+                # Print updated line in place (overwrite current line)
+                print(f"  {current_line}", end="\r", flush=True)
 
-        print()
+        # Print final line
+        if current_line:
+            print(f"  {current_line}")
         print("=" * 60)
 
         # Wait for audio to finish
@@ -374,7 +416,7 @@ Conversation:
 Reply with ONLY the title, nothing else."""
 
             title_response = client.models.generate_content(
-                model='gemini-2.5-flash-lite',
+                model=MODELS[min(current_model_index, len(MODELS) - 1)],
                 contents=title_prompt
             )
 

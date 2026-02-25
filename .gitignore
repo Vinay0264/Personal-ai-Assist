@@ -3,3 +3,6 @@
 response.mp3
 __pycache__/
 *.pyc
+chat_history/
+.venv/
+dependencies.md  
