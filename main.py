@@ -11,13 +11,14 @@ from backend.chat_history import (
     show_recent_chats_on_demand,
     save_chat_history
 )
+from backend.router import route
 
 # ===== LOAD ENVIRONMENT VARIABLES =====
 load_dotenv()
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
-    print("❌ ERROR: API key not found!")
+    print("❌ ERROR: Gemini API key not found!")
     exit()
 
 client = genai.Client(api_key=GEMINI_API_KEY)
@@ -56,6 +57,60 @@ def type_input():
         return None
 
 
+def handle_coming_soon(category):
+    """Friendly response for features not yet built"""
+    messages = {
+        "Realtime": "Real-time search is coming soon! I'll be able to look things up on the internet for you.",
+        "Open":     "App opening is coming soon! I'll be able to open apps for you.",
+        "Close":    "App closing is coming soon! I'll be able to close apps for you.",
+        "Play":     "Music and video control is coming soon! I'll be able to play things for you.",
+        "Generate": "Image generation is coming soon! I'll be able to create images for you.",
+    }
+    message = messages.get(category, "That feature is coming soon!")
+    print(f"\n🚧 [{category}] {message}")
+    speak(message)
+
+from datetime import datetime
+
+def greet_on_startup():
+    hour = datetime.now().hour
+    
+    if 5 <= hour < 12:
+        time_of_day = "morning"
+    elif 12 <= hour < 17:
+        time_of_day = "afternoon"
+    elif 17 <= hour < 21:
+        time_of_day = "evening"
+    else:
+        time_of_day = "night"
+
+    greetings = {
+        "morning": [
+            "Good morning sir! Hope you slept well. What are we working on today?",
+            "Good morning Vinay! Fresh start to a new day. How can I help?",
+            "Morning sir! Ready when you are.",
+        ],
+        "afternoon": [
+            "Good afternoon sir! How's the day going so far?",
+            "Afternoon Vinay! What can I do for you?",
+            "Good afternoon sir! What do you need?",
+        ],
+        "evening": [
+            "Good evening sir! Long day? I'm here if you need anything.",
+            "Good evening Vinay! What's on your mind?",
+            "Evening sir! How can I help you tonight?",
+        ],
+        "night": [
+            "Still up, sir? I'm here. What do you need?",
+            "Good night Vinay! Working late? Let's get it done.",
+            "Night sir! What are we doing?",
+        ],
+    }
+    
+    import random
+    greeting = random.choice(greetings[time_of_day])
+    speak(greeting)
+
 def main():
     global conversation_history, current_model_index
 
@@ -69,6 +124,9 @@ def main():
     print("💡 Say/Type: 'show my chats' or 'previous chats' to browse history")
     print("💡 Press Ctrl+C to exit completely (chat will be saved!)")
     print("=" * 60)
+
+    # ===== STARTUP GREETING =====
+    greet_on_startup()
 
     while True:
         try:
@@ -89,6 +147,7 @@ def main():
 
             while True:
                 try:
+                    # ── GET INPUT ──
                     if choice == '1':
                         user_text = listen()
 
@@ -109,33 +168,8 @@ def main():
 
                     user_lower = user_text.lower().strip()
 
-                    # ── EXIT CHECK ──
-                    exit_words = ['quit', 'exit', 'bye', 'goodbye', 'stop', 'close', 'end']
-                    should_quit = False
-
-                    if choice == '1':
-                        for word in exit_words:
-                            if word in user_lower:
-                                should_quit = True
-                                break
-                    else:
-                        for word in exit_words:
-                            if user_lower == word or word in user_lower.split():
-                                should_quit = True
-                                break
-
-                    if should_quit:
-                        speak("Nice talking to you. Take care! Switching modes.")
-                        save_chat_history(
-                            conversation_history, client,
-                            current_model_index, MODELS,
-                            format_history_for_prompt
-                        )
-                        conversation_history.clear()
-                        print("\n🔄 Returning to input selection...\n")
-                        break
-
                     # ── CHAT HISTORY TRIGGER CHECK ──
+                    # Check before routing (these are meta-commands, not queries)
                     chat_history_triggered = False
                     for trigger in CHAT_HISTORY_TRIGGERS:
                         if trigger in user_lower:
@@ -148,7 +182,8 @@ def main():
                     if chat_history_triggered:
                         continue
 
-                    # ── LONG-TERM MEMORY CHECK ──
+                    # ── MEMORY TRIGGER CHECK ──
+                    # Check before routing (these are meta-commands, not queries)
                     for trigger in REMEMBER_TRIGGERS:
                         if trigger in user_lower:
                             add_to_memory(
@@ -158,11 +193,38 @@ def main():
                             )
                             break
 
-                    # ── AI RESPONSE ──
-                    ai_response, conversation_history = think(
-                        user_text, conversation_history, client
-                    )
-                    speak(ai_response)
+                    # ── ROUTE THE QUERY ──
+                    decision = route(user_text)
+
+                    # ── HANDLE BASED ON DECISION ──
+
+                    if decision == "exit":
+                        speak("Goodbye! Take care. See you next time!")
+                        save_chat_history(
+                            conversation_history, client,
+                            current_model_index, MODELS,
+                            format_history_for_prompt
+                        )
+                        conversation_history.clear()
+                        print("\n🔄 Returning to input selection...\n")
+                        break
+
+                    elif decision.startswith("general"):
+                        ai_response, conversation_history = think(
+                            user_text, conversation_history, client
+                        )
+                        speak(ai_response)
+
+                    elif decision.startswith(("realtime", "open", "close", "play", "generate", "reminder", "system", "content", "google search", "youtube search")):
+
+                        handle_coming_soon(decision)
+
+                    else:
+                        # Fallback — treat as General
+                        ai_response, conversation_history = think(
+                            user_text, conversation_history, client
+                        )
+                        speak(ai_response)
 
                 except KeyboardInterrupt:
                     print("\n\n👋 Ctrl+C pressed. Saving chat and exiting...")
