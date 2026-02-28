@@ -58,9 +58,6 @@ RULES:
 -> 'youtube search (topic)' — search specifically on YouTube.
    'search Carry Minati on YouTube' → youtube search Carry Minati
 
--> 'exit' — user says goodbye or wants to end.
-   'bye', 'goodbye', 'ok bye', 'see you' → exit
-
 *** MULTI-TASK: 'open YouTube and play Believer' → open YouTube, play Believer ***
 *** CANNOT DECIDE: respond with 'general (query)' ***
 *** NEVER answer. NEVER explain. ONE line only. ***
@@ -93,17 +90,3 @@ def route(query):
         print(f"⚠️ Router error: {e} — defaulting to general")
         return f"general {query}"
 
-
-if __name__ == "__main__":
-    print("=" * 60)
-    print("🔀 SAIYAARA Router Test")
-    print("=" * 60)
-    print("Type a query to test routing. Type 'exit' to quit.\n")
-
-    while True:
-        query = input("Enter a query: ").strip()
-        if query.lower() == "exit":
-            break
-        if query:
-            result = route(query)
-            print(f"Result: {result}\n")

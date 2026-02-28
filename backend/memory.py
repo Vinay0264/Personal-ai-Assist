@@ -1,6 +1,7 @@
 import os
 import re
 import json
+from google import genai
 
 
 MEMORY_FILE = "data/memory.json"
@@ -40,57 +41,55 @@ def build_memory_prompt():
     return f"\n\nTHINGS YOU KNOW ABOUT THE USER (long-term memory):\n{facts_text}"
 
 
-def extract_fact_with_ai(message, client, current_model_index, models, clean_text_fn):
-    """
-    Use Gemini to extract a clean, properly phrased fact from a message.
-    First fact uses "Master's name is X" style.
-    Later facts use the person's actual name once known.
-    """
+def get_known_name():
+    """Get the user's name from existing memory if available"""
     existing_facts = load_long_term_memory()
-    known_name = None
     for f in existing_facts:
         name_match = re.search(r"master'?s?\s+name\s+is\s+(\w+)", f.lower())
         if name_match:
-            known_name = name_match.group(1).capitalize()
-            break
+            return name_match.group(1).capitalize()
+    return None
 
-    if not existing_facts or not known_name:
-        reference = "Master"
-        example = "Master's name is Vinay"
-    else:
-        reference = known_name
-        example = f"{known_name} is 21 years old"
+
+def convert_to_third_person(fact_raw, gemini_client, clean_text_fn):
+    """
+    Use Gemini ONLY to convert first-person fact to third-person.
+    e.g. "my name is Vinay" → "Master's name is Vinay"
+    e.g. "I upgraded you from Gemini to Groq" → "Vinay upgraded SAIYAARA from Gemini to Groq"
+    """
+    known_name = get_known_name()
+    reference = known_name if known_name else "Master"
 
     try:
-        extract_prompt = f"""Extract the key fact from this message and phrase it as a short memory note.
+        prompt = f"""Convert this first-person statement to third-person. Refer to the person as "{reference}".
 
-Message: "{message}"
+Statement: "{fact_raw}"
 
 Rules:
-- Refer to the person as "{reference}" (e.g. "{example}")
-- Keep it short — one sentence max
-- No extra explanation, just the fact
-- Reply with ONLY the fact sentence, nothing else"""
+- Just convert first-person words (I, my, me, we) to third-person using "{reference}"
+- Keep everything else exactly the same
+- One sentence only
+- Reply with ONLY the converted sentence, nothing else"""
 
-        response = client.models.generate_content(
-            model=models[min(current_model_index, len(models) - 1)],
-            contents=extract_prompt
+        response = gemini_client.models.generate_content(
+            model="gemini-2.5-flash-lite",
+            contents=prompt
         )
         return clean_text_fn(response.text.strip())
 
-    except Exception:
-        if known_name:
-            return f"{known_name}: {message[:80]}"
-        return f"Master: {message[:80]}"
+    except Exception as e:
+        print(f"⚠️ Gemini conversion failed: {e}")
+        # Simple fallback — just prepend reference
+        return f"{reference}: {fact_raw[:80]}"
 
 
-def add_to_memory(user_input, conversation_history, client, current_model_index, models, clean_text_fn):
+def add_to_memory(user_input, conversation_history, gemini_client, clean_text_fn):
     """
     Called when user says 'remember this / remember that / don't forget / keep in mind'.
 
     Two cases:
-    1. Fact inline:  "remember that my name is Vinay" -> extracts and saves
-    2. No fact:      "remember that" -> looks back at last conversation message
+    1. Inline fact:  "remember that I upgraded you to Groq" → convert to third person and save
+    2. No fact:      "remember that" → look back at last SAIYAARA response, convert and save
     """
     user_lower = user_input.lower().strip()
 
@@ -108,34 +107,38 @@ def add_to_memory(user_input, conversation_history, client, current_model_index,
     fact_raw = user_input[idx + len(triggered):].strip()
     fact_raw = re.sub(r'^[\s\-–—:,]+', '', fact_raw).strip()
 
-    existing_facts = load_long_term_memory()
-    is_first_fact = len(existing_facts) == 0
+    if fact_raw and len(fact_raw.split()) > 2:
+        # ── CASE 1: Inline fact ──
+        # User said "remember that I upgraded you from Gemini to Groq"
+        print(f"\n🧠 Remembering: \"{fact_raw[:60]}\"")
+        fact_to_save = convert_to_third_person(fact_raw, gemini_client, clean_text_fn)
 
-    if fact_raw:
-        fact_to_save = extract_fact_with_ai(fact_raw, client, current_model_index, models, clean_text_fn)
     else:
-        # Look back at last user message in conversation
-        prior_messages = [
+        # ── CASE 2: Look-back ──
+        # User said just "remember that" — referring to what SAIYAARA just said
+        saiyaara_responses = [
             msg["parts"][0]
             for msg in conversation_history
-            if msg["role"] == "user"
-            and not any(t in msg["parts"][0].lower() for t in REMEMBER_TRIGGERS)
+            if msg["role"] == "model"
         ]
 
-        if not prior_messages:
+        if not saiyaara_responses:
             print("⚠️ Nothing in conversation to remember yet.")
             return None
 
-        last_message = prior_messages[-1]
-        preview = last_message[:60] + "..." if len(last_message) > 60 else last_message
-        print(f"\n🧠 Remembering from last message: \"{preview}\"")
-        fact_to_save = extract_fact_with_ai(last_message, client, current_model_index, models, clean_text_fn)
+        last_response = saiyaara_responses[-1]
+        preview = last_response[:60] + "..." if len(last_response) > 60 else last_response
+        print(f"\n🧠 Remembering from last exchange: \"{preview}\"")
+
+        # Last SAIYAARA response is already third-person friendly — save directly
+        fact_to_save = clean_text_fn(last_response)
 
     if not fact_to_save:
         print("⚠️ Could not extract a fact. Memory not saved.")
         return None
 
     # Avoid duplicates
+    existing_facts = load_long_term_memory()
     if fact_to_save.lower() not in [f.lower() for f in existing_facts]:
         existing_facts.append(fact_to_save)
         save_long_term_memory(existing_facts)

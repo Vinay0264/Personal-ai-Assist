@@ -105,7 +105,7 @@ def show_recent_chats_on_demand(conversation_history, speak_fn):
 
 
 def generate_fallback_title(conversation_history):
-    """Generate a meaningful title from conversation keywords when AI title generation fails"""
+    """Generate a meaningful title from conversation keywords"""
     stopwords = {
         "i", "me", "my", "we", "you", "your", "he", "she", "it", "they", "them",
         "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",
@@ -144,8 +144,8 @@ def generate_fallback_title(conversation_history):
     return f"chat_{timestamp}"
 
 
-def save_chat_history(conversation_history, client, current_model_index, models, format_history_fn):
-    """Save conversation to JSON file with AI-generated title"""
+def save_chat_history(conversation_history, format_history_fn, gemini_client=None):
+    """Save conversation to JSON file with AI-generated title (Gemini) or keyword fallback"""
     if len(conversation_history) == 0:
         print("💭 No conversation to save.")
         return
@@ -155,30 +155,35 @@ def save_chat_history(conversation_history, client, current_model_index, models,
 
         chat_title = None
 
-        # Try AI title generation
-        try:
-            history_preview = format_history_fn(conversation_history[:6])
+        # ── TRY GEMINI TITLE GENERATION (1 call per session — very low quota usage) ──
+        if gemini_client:
+            try:
+                history_preview = format_history_fn(conversation_history[:6])
 
-            title_prompt = f"""Based on this conversation, create a SHORT 3-4 word title (like "Cooking Tips Chat" or "Python Help Session").
+                title_prompt = f"""Based on this conversation, create a SHORT 3-4 word title (like "Cooking Tips Chat" or "Python Help Session").
 
 Conversation:
 {history_preview}
 
 Reply with ONLY the title, nothing else."""
 
-            title_response = client.models.generate_content(
-                model=models[min(current_model_index, len(models) - 1)],
-                contents=title_prompt
-            )
+                title_response = gemini_client.models.generate_content(
+                    model="gemini-2.5-flash-lite",
+                    contents=title_prompt
+                )
 
-            raw_title = title_response.text.strip()
-            chat_title = raw_title.replace(' ', '-').lower()
-            chat_title = re.sub(r'[^\w-]', '', chat_title)
-            print(f"🏷️  Chat title: {raw_title}")
+                raw_title = title_response.text.strip()
+                chat_title = raw_title.replace(' ', '-').lower()
+                chat_title = re.sub(r'[^\w-]', '', chat_title)
+                print(f"🏷️  Chat title (AI): {raw_title}")
 
-        except Exception as title_error:
-            print(f"⚠️  Could not generate AI title ({type(title_error).__name__}). Using keyword title instead.")
+            except Exception:
+                print("⚠️  AI title failed. Using keyword title instead.")
+                chat_title = generate_fallback_title(conversation_history)
+        else:
+            # ── KEYWORD FALLBACK (no API needed) ──
             chat_title = generate_fallback_title(conversation_history)
+            print(f"🏷️  Chat title (keywords): {chat_title}")
 
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M")
         filename = f"{chat_title}_{timestamp}.json" if not chat_title.startswith("chat_") else f"{chat_title}.json"

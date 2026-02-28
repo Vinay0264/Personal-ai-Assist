@@ -1,14 +1,15 @@
 import re
 import time
 
-from google import genai
+from groq import Groq
 from backend.memory import build_memory_prompt
 
 
+# ===== GROQ MODELS (fallback chain) =====
 MODELS = [
-    "gemini-2.5-flash-lite",
-    "gemini-2.5-flash",
-    "gemini-2.5-pro",
+    "llama-3.1-8b-instant",     # Primary — 14,400 RPD, fastest
+    "llama-3.3-70b-versatile",  # Fallback 1 — 1,000 RPD, smarter
+    "llama-3.1-70b-versatile",  # Fallback 2 — 1,000 RPD
 ]
 
 current_model_index = 0
@@ -28,7 +29,7 @@ def clean_text_for_speech(text):
 
 
 def format_history_for_prompt(history):
-    """Convert conversation history list to readable string for AI prompt"""
+    """Convert conversation history list to readable string"""
     formatted = ""
     for msg in history:
         speaker = "User" if msg["role"] == "user" else "Saiyaara"
@@ -36,8 +37,17 @@ def format_history_for_prompt(history):
     return formatted
 
 
+def build_groq_messages(conversation_history, system_prompt):
+    """Convert our history format to Groq's messages format"""
+    messages = [{"role": "system", "content": system_prompt}]
+    for msg in conversation_history:
+        role = "user" if msg["role"] == "user" else "assistant"
+        messages.append({"role": role, "content": msg["parts"][0]})
+    return messages
+
+
 def think(user_input, conversation_history, client):
-    """Send to Gemini AI and get response with memory, personality, auto-retry, and model fallback"""
+    """Send to Groq AI and get response with memory, personality, auto-retry, and model fallback"""
     global current_model_index
 
     # Build memory section from long-term memory
@@ -52,8 +62,9 @@ PERSONALITY:
 - Use natural language, not robotic responses
 - Never mention you're an AI, LLM, or language model
 - Respond as if you're a real person having a genuine conversation
-- When addressing the user by name, mostly use "sir" — but occasionally use their actual name naturally, like a close assistant would. Don't use a name or "sir" in every single response — keep it natural and varied.
-
+- ALWAYS address the user as "sir" — never use their actual name in responses
+- The user's name exists in your memory only so you know WHO you're talking to — never say it out loud
+- Every single response must use "sir" if addressing the user directly, no exceptions
 RULES:
 - Keep responses concise and natural (2-4 sentences usually)
 - Be helpful but not overly formal
@@ -74,13 +85,9 @@ Remember: You're not just an assistant, you're a friend.{memory_section}"""
     if len(conversation_history) > 20:
         conversation_history = conversation_history[-20:]
 
-    # Build full prompt
-    history_text = format_history_for_prompt(conversation_history)
-    prompt = system_prompt + "\n\nConversation so far:\n" + history_text + "\nSaiyaara:"
-
     # AUTO-RETRY WITH BACKOFF + MODEL FALLBACK
     max_retries = 3
-    wait_times = [15, 30, 60]
+    wait_times = [10, 20, 40]
 
     while current_model_index < len(MODELS):
         model_name = MODELS[current_model_index]
@@ -90,12 +97,18 @@ Remember: You're not just an assistant, you're a friend.{memory_section}"""
                 label = f"🧠 Thinking (model: {model_name})..." if attempt == 0 else f"🧠 Retrying (attempt {attempt + 1}/{max_retries}, model: {model_name})..."
                 print(label)
 
-                response = client.models.generate_content(
+                # Build Groq messages format
+                messages = build_groq_messages(conversation_history, system_prompt)
+
+                response = client.chat.completions.create(
                     model=model_name,
-                    contents=prompt
+                    messages=messages,
+                    max_tokens=300,
+                    temperature=0.8,
                 )
 
-                clean_response = clean_text_for_speech(response.text.strip())
+                raw_response = response.choices[0].message.content.strip()
+                clean_response = clean_text_for_speech(raw_response)
 
                 conversation_history.append({
                     "role": "model",
@@ -107,7 +120,7 @@ Remember: You're not just an assistant, you're a friend.{memory_section}"""
             except Exception as e:
                 error_msg = str(e)
 
-                if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
+                if "429" in error_msg or "rate_limit" in error_msg.lower():
                     if attempt < max_retries - 1:
                         wait = wait_times[attempt]
                         print(f"\n⚠️  Rate limit hit on {model_name}! Waiting {wait}s then retrying...")
@@ -128,4 +141,4 @@ Remember: You're not just an assistant, you're a friend.{memory_section}"""
 
     print("⚠️  All models exhausted. Daily quota finished across all models.")
     conversation_history.pop()
-    return "I've used up all available models for today. Quota resets at midnight Pacific Time — let's continue then!", conversation_history
+    return "I've used up all available models for today. Quota resets at midnight — let's continue then!", conversation_history

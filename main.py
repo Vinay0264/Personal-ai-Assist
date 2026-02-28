@@ -1,6 +1,11 @@
 import os
+import random
+import threading
+from datetime import datetime
 from dotenv import load_dotenv
 from google import genai
+from groq import Groq
+import keyboard
 
 from backend.tts import speak
 from backend.stt import listen
@@ -16,65 +21,41 @@ from backend.router import route
 # ===== LOAD ENVIRONMENT VARIABLES =====
 load_dotenv()
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-if not GEMINI_API_KEY:
-    print("❌ ERROR: Gemini API key not found!")
+# ===== GROQ CLIENT (conversation brain — 14,400 RPD) =====
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+if not GROQ_API_KEY:
+    print("❌ ERROR: Groq API key not found!")
     exit()
+groq_client = Groq(api_key=GROQ_API_KEY)
 
-client = genai.Client(api_key=GEMINI_API_KEY)
-
+# ===== GEMINI CLIENT (title generation only — ~1 call per session) =====
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+gemini_client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
+print("Gemini client:", gemini_client)
 conversation_history = []
 MAX_HISTORY = 20
 
+# ===== EXIT TRIGGERS =====
+EXIT_TRIGGERS = [
+    "you can quit now",
+    "you can quit",
+    "you can exit now",
+    "you can exit",
+    "you can stop",
+    "you can go to sleep",
+    "you can sleep now",
+    "stop saiyaara",
+    "exit saiyaara",
+    "saiyaara exit",
+    "saiyaara stop",
+    "saiyaara sleep",
+]
 
-def get_input_choice():
-    """Ask user how they want to input (voice or text)"""
-    print("\n" + "=" * 60)
-    print("📝 How do you want to communicate?")
-    print("=" * 60)
-    print("1. 🎤 Voice Input (speak)")
-    print("2. ⌨️  Text Input (type)")
-    print("=" * 60)
-
-    while True:
-        choice = input("Enter 1 or 2: ").strip()
-        if choice in ['1', '2']:
-            return choice
-        print("❌ Invalid choice. Please enter 1 or 2.")
-
-
-def type_input():
-    """Get text input from keyboard"""
-    msg_count = len(conversation_history)
-    if msg_count > 0:
-        print(f"[🧠 Memory: {msg_count} messages]")
-    print("\n⌨️  Type your message:")
-    text = input("You: ").strip()
-    if text:
-        return text
-    else:
-        print("❌ Empty input. Please type something.")
-        return None
-
-
-def handle_coming_soon(category):
-    """Friendly response for features not yet built"""
-    messages = {
-        "Realtime": "Real-time search is coming soon! I'll be able to look things up on the internet for you.",
-        "Open":     "App opening is coming soon! I'll be able to open apps for you.",
-        "Close":    "App closing is coming soon! I'll be able to close apps for you.",
-        "Play":     "Music and video control is coming soon! I'll be able to play things for you.",
-        "Generate": "Image generation is coming soon! I'll be able to create images for you.",
-    }
-    message = messages.get(category, "That feature is coming soon!")
-    print(f"\n🚧 [{category}] {message}")
-    speak(message)
-
-from datetime import datetime
 
 def greet_on_startup():
+    """Greet user based on time of day"""
     hour = datetime.now().hour
-    
+
     if 5 <= hour < 12:
         time_of_day = "morning"
     elif 12 <= hour < 17:
@@ -106,10 +87,139 @@ def greet_on_startup():
             "Night sir! What are we doing?",
         ],
     }
-    
-    import random
+
     greeting = random.choice(greetings[time_of_day])
     speak(greeting)
+
+
+def get_exit_message(user_lower):
+    """Return contextual farewell based on what user said"""
+    if "sleep" in user_lower:
+        messages = [
+            "Going to sleep now. Goodnight sir!",
+            "Sleep mode on. Rest well too Vinay!",
+            "Okay, lights out. Goodnight!",
+        ]
+    elif "stop" in user_lower:
+        messages = [
+            "Stopping now. Take care sir!",
+            "Alright, stopping. See you soon Vinay!",
+            "Stopped. Come back anytime sir!",
+        ]
+    elif "quit" in user_lower:
+        messages = [
+            "Quitting now. Bye sir!",
+            "Alright, quitting. Take care Vinay!",
+            "See you next time sir!",
+        ]
+    elif "exit" in user_lower:
+        messages = [
+            "Exiting now. See you soon sir!",
+            "Okay, exiting. Bye Vinay!",
+            "Exited. Come back anytime sir!",
+        ]
+    else:
+        messages = [
+            "Going offline now. Take care sir!",
+            "Signing off. See you soon Vinay!",
+            "Okay, bye for now sir!",
+        ]
+    return random.choice(messages)
+
+
+def handle_coming_soon(decision):
+    """Friendly response for features not yet built"""
+    if decision.startswith("realtime"):
+        message = "Real-time search is coming soon! I'll be able to look things up on the internet for you."
+    elif decision.startswith("open"):
+        message = "App opening is coming soon! I'll be able to open apps for you."
+    elif decision.startswith("close"):
+        message = "App closing is coming soon! I'll be able to close apps for you."
+    elif decision.startswith("play"):
+        message = "Music and video control is coming soon! I'll be able to play things for you."
+    elif decision.startswith("generate"):
+        message = "Image generation is coming soon! I'll be able to create images for you."
+    elif decision.startswith("reminder"):
+        message = "Reminders are coming soon! I'll be able to set alarms and reminders for you."
+    elif decision.startswith("system"):
+        message = "System controls are coming soon! I'll be able to control volume and settings for you."
+    elif decision.startswith("content"):
+        message = "Content writing is coming soon! I'll be able to write emails and documents for you."
+    elif decision.startswith("google search"):
+        message = "Google search is coming soon! I'll be able to search the web for you."
+    elif decision.startswith("youtube search"):
+        message = "YouTube search is coming soon! I'll be able to search YouTube for you."
+    else:
+        message = "That feature is coming soon!"
+
+    print(f"\n🚧 {message}")
+    speak(message)
+
+
+def do_save_and_exit(user_lower):
+    """Save chat and return True to signal exit"""
+    speak(get_exit_message(user_lower))
+    save_chat_history(
+        conversation_history,
+        format_history_for_prompt,
+        gemini_client
+    )
+    return True
+
+
+def process_input(user_text):
+    """Process any input — text or voice — through the same pipeline"""
+    global conversation_history, current_model_index
+
+    if not user_text:
+        return False
+
+    user_lower = user_text.lower().strip()
+
+    # ── EXIT TRIGGER CHECK ──
+    for trigger in EXIT_TRIGGERS:
+        if trigger in user_lower:
+            return do_save_and_exit(user_lower)
+
+    # ── CHAT HISTORY TRIGGER CHECK ──
+    for trigger in CHAT_HISTORY_TRIGGERS:
+        if trigger in user_lower:
+            loaded = show_recent_chats_on_demand(conversation_history, speak)
+            if loaded is not None:
+                conversation_history = loaded
+            return False
+
+    # ── MEMORY TRIGGER CHECK ──
+    for trigger in REMEMBER_TRIGGERS:
+        if trigger in user_lower:
+            add_to_memory(user_text, conversation_history, gemini_client, clean_text_for_speech)
+            break
+
+    # ── ROUTE THE QUERY ──
+    decision = route(user_text)
+
+    # ── HANDLE BASED ON DECISION ──
+    if decision == "exit":
+        return do_save_and_exit(user_lower)
+
+    elif decision.startswith("general") or decision == "general":
+        ai_response, conversation_history = think(
+            user_text, conversation_history, groq_client
+        )
+        speak(ai_response)
+
+    elif decision.startswith(("realtime", "open", "close", "play", "generate", "reminder", "system", "content", "google search", "youtube search")):
+        handle_coming_soon(decision)
+
+    else:
+        # Fallback — treat as general
+        ai_response, conversation_history = think(
+            user_text, conversation_history, groq_client
+        )
+        speak(ai_response)
+
+    return False
+
 
 def main():
     global conversation_history, current_model_index
@@ -119,138 +229,80 @@ def main():
     print("=" * 60)
     print("✅ Status: Active and Ready!")
     print("=" * 60)
-    print("💡 Say/Type: 'quit', 'bye', 'goodbye', 'stop' to switch modes")
-    print("💡 Say/Type: 'remember this — [fact]' to save to long-term memory")
-    print("💡 Say/Type: 'show my chats' or 'previous chats' to browse history")
-    print("💡 Press Ctrl+C to exit completely (chat will be saved!)")
+    print("💡 Type your message and press Enter anytime")
+    print("💡 Press F2 to start voice input, F2 again to stop")
+    print("💡 Say/Type: 'remember this — [fact]' to save to memory")
+    print("💡 Say/Type: 'show my chats' to browse history")
+    print("💡 Say/Type: 'you can exit now' / 'you can sleep' to exit")
+    print("💡 Press Ctrl+C for emergency exit")
     print("=" * 60)
 
     # ===== STARTUP GREETING =====
     greet_on_startup()
 
+    # ===== MAIN LOOP =====
     while True:
         try:
-            choice = get_input_choice()
-
-            print(f"\n✅ {'Voice' if choice == '1' else 'Text'} mode activated!")
-            if choice == '1':
-                print("💡 Press SPACE BAR to start/stop recording")
-                print("💡 Say 'bye', 'goodbye', 'quit', or 'stop' to switch modes")
-                print("💡 Say 'remember this — [fact]' to save to long-term memory")
+            msg_count = len(conversation_history)
+            if msg_count > 0:
+                print(f"\n[🧠 {msg_count} messages in memory | F2 for voice]")
             else:
-                print("💡 Type 'quit', 'bye', 'goodbye', or 'exit' to switch modes")
-                print("💡 Type 'remember this — [fact]' to save to long-term memory")
-            print(f"💡 Currently in: {'🎤 VOICE MODE' if choice == '1' else '⌨️ TEXT MODE'}\n")
+                print("\n[F2 for voice input]")
 
-            failed_attempts = 0
-            max_failed_attempts = 3
+            # ── WAIT FOR TEXT INPUT OR F2 ──
+            voice_triggered = threading.Event()
 
-            while True:
+            def on_f2():
+                voice_triggered.set()
+
+            keyboard.add_hotkey('f2', on_f2)
+
+            print("You: ", end="", flush=True)
+
+            input_done = threading.Event()
+            text_result = [None]
+
+            def get_text():
                 try:
-                    # ── GET INPUT ──
-                    if choice == '1':
-                        user_text = listen()
+                    text_result[0] = input("")
+                    input_done.set()
+                except:
+                    input_done.set()
 
-                        if user_text is None:
-                            failed_attempts += 1
-                            print(f"[Attempt {failed_attempts}/{max_failed_attempts}]")
-                            if failed_attempts >= max_failed_attempts:
-                                print("\n⚠️ Too many failed attempts. Returning to menu...\n")
-                                break
-                            continue
-                        else:
-                            failed_attempts = 0
-                    else:
-                        user_text = type_input()
+            text_thread = threading.Thread(target=get_text, daemon=True)
+            text_thread.start()
 
-                    if not user_text:
-                        continue
+            import time
+            while not input_done.is_set() and not voice_triggered.is_set():
+                time.sleep(0.05)
 
-                    user_lower = user_text.lower().strip()
+            keyboard.remove_hotkey('f2')
 
-                    # ── CHAT HISTORY TRIGGER CHECK ──
-                    # Check before routing (these are meta-commands, not queries)
-                    chat_history_triggered = False
-                    for trigger in CHAT_HISTORY_TRIGGERS:
-                        if trigger in user_lower:
-                            chat_history_triggered = True
-                            loaded = show_recent_chats_on_demand(conversation_history, speak)
-                            if loaded is not None:
-                                conversation_history = loaded
-                            break
+            if voice_triggered.is_set() and not input_done.is_set():
+                print("\n")
+                user_text = listen()
+            else:
+                user_text = text_result[0].strip() if text_result[0] else None
 
-                    if chat_history_triggered:
-                        continue
+            if not user_text:
+                continue
 
-                    # ── MEMORY TRIGGER CHECK ──
-                    # Check before routing (these are meta-commands, not queries)
-                    for trigger in REMEMBER_TRIGGERS:
-                        if trigger in user_lower:
-                            add_to_memory(
-                                user_text, conversation_history,
-                                client, current_model_index,
-                                MODELS, clean_text_for_speech
-                            )
-                            break
-
-                    # ── ROUTE THE QUERY ──
-                    decision = route(user_text)
-
-                    # ── HANDLE BASED ON DECISION ──
-
-                    if decision == "exit":
-                        speak("Goodbye! Take care. See you next time!")
-                        save_chat_history(
-                            conversation_history, client,
-                            current_model_index, MODELS,
-                            format_history_for_prompt
-                        )
-                        conversation_history.clear()
-                        print("\n🔄 Returning to input selection...\n")
-                        break
-
-                    elif decision.startswith("general"):
-                        ai_response, conversation_history = think(
-                            user_text, conversation_history, client
-                        )
-                        speak(ai_response)
-
-                    elif decision.startswith(("realtime", "open", "close", "play", "generate", "reminder", "system", "content", "google search", "youtube search")):
-
-                        handle_coming_soon(decision)
-
-                    else:
-                        # Fallback — treat as General
-                        ai_response, conversation_history = think(
-                            user_text, conversation_history, client
-                        )
-                        speak(ai_response)
-
-                except KeyboardInterrupt:
-                    print("\n\n👋 Ctrl+C pressed. Saving chat and exiting...")
-                    save_chat_history(
-                        conversation_history, client,
-                        current_model_index, MODELS,
-                        format_history_for_prompt
-                    )
-                    return
-
-                except Exception as e:
-                    print(f"❌ Error in inner loop: {e}")
-                    continue
+            should_exit = process_input(user_text)
+            if should_exit:
+                break
 
         except KeyboardInterrupt:
-            print("\n\n👋 Ctrl+C pressed. Saving chat and exiting...")
+            print("\n\n👋 Emergency exit. Saving chat...")
             save_chat_history(
-                conversation_history, client,
-                current_model_index, MODELS,
-                format_history_for_prompt
+                conversation_history,
+                format_history_for_prompt,
+                gemini_client
             )
             break
 
         except Exception as e:
-            print(f"❌ Error in outer loop: {e}")
-            break
+            print(f"❌ Error: {e}")
+            continue
 
 
 if __name__ == "__main__":

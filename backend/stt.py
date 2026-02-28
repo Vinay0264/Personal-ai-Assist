@@ -9,37 +9,25 @@ recognizer = sr.Recognizer()
 
 
 def listen():
-    """Listen using push-to-talk (Press Space to start/stop)"""
-    print("\n" + "=" * 60)
-    print("🎤 PUSH-TO-TALK MODE")
-    print("=" * 60)
-    print("👉 Press SPACE BAR once to START speaking")
-    print("👉 Press SPACE BAR again to STOP")
+    """Listen using F2 toggle — F2 to start, F2 again to stop"""
+
+    print("\n🎤 Mic is ON — speak now! Press F2 again to stop.")
     print("=" * 60)
 
     with sr.Microphone() as source:
-        print("\n🔧 Calibrating microphone...")
-        recognizer.adjust_for_ambient_noise(source, duration=0.5)
+        # Quick calibration
+        recognizer.adjust_for_ambient_noise(source, duration=0.3)
         recognizer.energy_threshold = 200
         recognizer.dynamic_energy_threshold = True
-        print("✅ Ready!")
-
-        print("\n⏸️  Press SPACE BAR to start recording...")
-        keyboard.wait('space')
-        time.sleep(0.1)
-
-        print("\n🔴 RECORDING... Press SPACE BAR again when done!")
-        print("=" * 60)
-        print("🎙️  Speak now...")
 
         stop_recording = threading.Event()
 
-        def wait_for_space():
-            keyboard.wait('space')
+        def wait_for_f2():
+            keyboard.wait('f2')
             stop_recording.set()
 
-        space_thread = threading.Thread(target=wait_for_space, daemon=True)
-        space_thread.start()
+        f2_thread = threading.Thread(target=wait_for_f2, daemon=True)
+        f2_thread.start()
 
         audio_data = []
 
@@ -57,20 +45,19 @@ def listen():
                 except sr.WaitTimeoutError:
                     continue
 
-            time.sleep(0.5)
+            # Capture any final audio after F2 press
+            time.sleep(0.3)
             try:
-                audio = recognizer.listen(source, timeout=0.5, phrase_time_limit=1)
+                audio = recognizer.listen(source, timeout=0.3, phrase_time_limit=1)
                 audio_data.append(audio.get_raw_data())
             except:
                 pass
 
-            print("⏹️  Recording stopped!")
+            print("⏹️  Mic OFF — processing...")
 
             if not audio_data:
                 print("❌ No audio recorded. Please try again.")
                 return None
-
-            print("🔄 Processing speech...")
 
             sample_rate = source.SAMPLE_RATE
             sample_width = source.SAMPLE_WIDTH

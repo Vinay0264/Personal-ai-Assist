@@ -1,4 +1,5 @@
 google-genai
+groq
 SpeechRecognition
 pyaudio
 python-dotenv
