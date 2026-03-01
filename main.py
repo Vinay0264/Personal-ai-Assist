@@ -1,22 +1,25 @@
 import os
 import random
 import threading
+import time
 from datetime import datetime
 from dotenv import load_dotenv
 from google import genai
 from groq import Groq
+from rich import print
 import keyboard
-
-from backend.tts import speak
+from backend.tts import speak, start_tts_generation, play_pregenerated
 from backend.stt import listen
 from backend.brain import think, clean_text_for_speech, format_history_for_prompt, MODELS, current_model_index
-from backend.memory import REMEMBER_TRIGGERS, add_to_memory
 from backend.chat_history import (
+    REMEMBER_TRIGGERS,
     CHAT_HISTORY_TRIGGERS,
+    add_to_memory,
     show_recent_chats_on_demand,
     save_chat_history
 )
 from backend.router import route
+from backend.brain import slow_display
 
 # ===== LOAD ENVIRONMENT VARIABLES =====
 load_dotenv()
@@ -31,7 +34,7 @@ groq_client = Groq(api_key=GROQ_API_KEY)
 # ===== GEMINI CLIENT (title generation only — ~1 call per session) =====
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 gemini_client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
-print("Gemini client:", gemini_client)
+
 conversation_history = []
 MAX_HISTORY = 20
 
@@ -89,7 +92,20 @@ def greet_on_startup():
     }
 
     greeting = random.choice(greetings[time_of_day])
-    speak(greeting)
+
+    tts_file, tts_ready = start_tts_generation(greeting)
+    tts_ready.wait(timeout=10)
+
+    print("\n🤖 SAIYAARA:")
+
+    audio_thread = threading.Thread(
+        target=play_pregenerated,
+        args=(tts_file, tts_ready),
+        daemon=True
+    )
+    audio_thread.start()
+    slow_display(greeting)
+    audio_thread.join()
 
 
 def get_exit_message(user_lower):
@@ -127,38 +143,37 @@ def get_exit_message(user_lower):
     return random.choice(messages)
 
 
-def handle_coming_soon(decision):
+def handle_coming_soon(task):
     """Friendly response for features not yet built"""
-    if decision.startswith("realtime"):
+    if task.startswith("realtime"):
         message = "Real-time search is coming soon! I'll be able to look things up on the internet for you."
-    elif decision.startswith("open"):
+    elif task.startswith("open"):
         message = "App opening is coming soon! I'll be able to open apps for you."
-    elif decision.startswith("close"):
+    elif task.startswith("close"):
         message = "App closing is coming soon! I'll be able to close apps for you."
-    elif decision.startswith("play"):
+    elif task.startswith("play"):
         message = "Music and video control is coming soon! I'll be able to play things for you."
-    elif decision.startswith("generate"):
+    elif task.startswith("generate"):
         message = "Image generation is coming soon! I'll be able to create images for you."
-    elif decision.startswith("reminder"):
+    elif task.startswith("reminder"):
         message = "Reminders are coming soon! I'll be able to set alarms and reminders for you."
-    elif decision.startswith("system"):
+    elif task.startswith("system"):
         message = "System controls are coming soon! I'll be able to control volume and settings for you."
-    elif decision.startswith("content"):
+    elif task.startswith("content"):
         message = "Content writing is coming soon! I'll be able to write emails and documents for you."
-    elif decision.startswith("google search"):
+    elif task.startswith("google search"):
         message = "Google search is coming soon! I'll be able to search the web for you."
-    elif decision.startswith("youtube search"):
+    elif task.startswith("youtube search"):
         message = "YouTube search is coming soon! I'll be able to search YouTube for you."
     else:
         message = "That feature is coming soon!"
 
-    print(f"\n🚧 {message}")
-    speak(message)
+    speak(message, display=True)
 
 
 def do_save_and_exit(user_lower):
     """Save chat and return True to signal exit"""
-    speak(get_exit_message(user_lower))
+    speak(get_exit_message(user_lower), display=True)
     save_chat_history(
         conversation_history,
         format_history_for_prompt,
@@ -184,7 +199,7 @@ def process_input(user_text):
     # ── CHAT HISTORY TRIGGER CHECK ──
     for trigger in CHAT_HISTORY_TRIGGERS:
         if trigger in user_lower:
-            loaded = show_recent_chats_on_demand(conversation_history, speak)
+            loaded = show_recent_chats_on_demand(conversation_history, lambda t: speak(t, display=True))
             if loaded is not None:
                 conversation_history = loaded
             return False
@@ -195,28 +210,28 @@ def process_input(user_text):
             add_to_memory(user_text, conversation_history, gemini_client, clean_text_for_speech)
             break
 
-    # ── ROUTE THE QUERY ──
-    decision = route(user_text)
+    # ── ROUTE THE QUERY → returns a list ──
+    tasks = route(user_text)
 
-    # ── HANDLE BASED ON DECISION ──
-    if decision == "exit":
-        return do_save_and_exit(user_lower)
+    # ── LOOP THROUGH EACH TASK ──
+    for task in tasks:
 
-    elif decision.startswith("general") or decision == "general":
-        ai_response, conversation_history = think(
-            user_text, conversation_history, groq_client
-        )
-        speak(ai_response)
+        if task == "exit":
+            return do_save_and_exit(user_lower)
 
-    elif decision.startswith(("realtime", "open", "close", "play", "generate", "reminder", "system", "content", "google search", "youtube search")):
-        handle_coming_soon(decision)
+        elif task.startswith("general"):
+            ai_response, conversation_history = think(
+                user_text, conversation_history, groq_client
+            )
 
-    else:
-        # Fallback — treat as general
-        ai_response, conversation_history = think(
-            user_text, conversation_history, groq_client
-        )
-        speak(ai_response)
+        elif task.startswith(("realtime", "open", "close", "play", "generate", "reminder", "system", "content", "google search", "youtube search")):
+            handle_coming_soon(task)
+
+        else:
+            # Fallback — treat as general
+            ai_response, conversation_history = think(
+                user_text, conversation_history, groq_client
+            )
 
     return False
 
@@ -225,9 +240,9 @@ def main():
     global conversation_history, current_model_index
 
     print("\n" + "=" * 60)
-    print("🤖 SAIYAARA - Your Personal AI Assistant")
+    print("[bold blue]🤖 SAIYAARA - Your Personal AI Assistant")
     print("=" * 60)
-    print("✅ Status: Active and Ready!")
+    print("[bold green]✅ Status: Active and Ready!")
     print("=" * 60)
     print("💡 Type your message and press Enter anytime")
     print("💡 Press F2 to start voice input, F2 again to stop")

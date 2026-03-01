@@ -74,3 +74,18 @@ def listen():
         except Exception as e:
             print(f"❌ Error: {e}")
             return None
+
+
+# ===== TEST =====
+if __name__ == "__main__":
+    print("🎤 STT Test — press F2 to start, F2 again to stop. Ctrl+C to quit.\n")
+    while True:
+        try:
+            result = listen()
+            if result:
+                print(f"📝 Transcribed: {result}\n")
+            else:
+                print("❌ Nothing captured.\n")
+        except KeyboardInterrupt:
+            print("\n👋 Test ended.")
+            break

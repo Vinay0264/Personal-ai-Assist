@@ -1,8 +1,23 @@
 import re
 import time
+import threading
 
 from groq import Groq
-from backend.memory import build_memory_prompt
+from backend.chat_history import build_memory_prompt
+from backend.tts import start_tts_generation, play_pregenerated
+
+from datetime import datetime
+
+def get_realtime_info():
+    now = datetime.now()
+    return (
+        f"\n\nCURRENT DATE & TIME:"
+        f"\nDay: {now.strftime('%A')}"
+        f"\nDate: {now.strftime('%d')}"
+        f"\nMonth: {now.strftime('%B')}"
+        f"\nYear: {now.strftime('%Y')}"
+        f"\nTime: {now.strftime('%H:%M:%S')}"
+    )
 
 
 # ===== GROQ MODELS (fallback chain) =====
@@ -24,7 +39,7 @@ def clean_text_for_speech(text):
     text = text.replace('`', '')
     text = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', text)
     text = ' '.join(text.split())
-    text = re.sub(r'[^\w\s,.!?-]', '', text)
+    text = re.sub(r'[^\w\s,.!?\'"-:]', '', text)
     return text
 
 
@@ -46,14 +61,36 @@ def build_groq_messages(conversation_history, system_prompt):
     return messages
 
 
+def slow_display(text, line_width=150, char_delay=0.05):
+    """Display text char by char with delay — typewriter effect"""
+    current_line = ""
+    for char in text:
+        current_line += char
+        if char == '\n' or (char == ' ' and len(current_line) > line_width):
+            print(f"  {current_line}")
+            current_line = ""
+        else:
+            print(f"  {current_line}", end="\r", flush=True)
+        time.sleep(char_delay)
+    if current_line.strip():
+        print(f"  {current_line}")
+
+
 def think(user_input, conversation_history, client):
-    """Send to Groq AI and get response with memory, personality, auto-retry, and model fallback"""
+    """
+    1. Collect full Groq response at full speed
+    2. Start TTS generation in background
+    3. Wait for TTS to be ready
+    4. Start audio playback + slow_display() simultaneously
+    """
     global current_model_index
 
-    # Build memory section from long-term memory
     memory_section = build_memory_prompt()
+    realtime_section = get_realtime_info()
 
-    system_prompt = f"""You are SAIYAARA, a friendly AI assistant and companion.
+
+    system_prompt = f"""You are SAIYAARA, a friendly AI assistant and companion. Your name is SAIYAARA.
+
 
 PERSONALITY:
 - Talk like a supportive, caring friend
@@ -65,6 +102,10 @@ PERSONALITY:
 - ALWAYS address the user as "sir" — never use their actual name in responses
 - The user's name exists in your memory only so you know WHO you're talking to — never say it out loud
 - Every single response must use "sir" if addressing the user directly, no exceptions
+- Occasionally use 1-2 relevant emojis to add warmth and expressiveness
+  - Use emojis naturally, not on every sentence
+  - Good moments: encouragement 💪, agreement 😄, excitement 🔥, empathy 🙏
+  - Never overdo it — max 2 emojis per response
 RULES:
 - Keep responses concise and natural (2-4 sentences usually)
 - Be helpful but not overly formal
@@ -73,19 +114,15 @@ RULES:
 - Be encouraging and positive
 - If the user says "remember this/that", "don't forget", or "keep in mind" — confirm you've noted it warmly
 
-Remember: You're not just an assistant, you're a friend.{memory_section}"""
-
-    # Add user message to history
+Remember: You're not just an assistant, you're a friend.{memory_section}{realtime_section}"""
     conversation_history.append({
         "role": "user",
         "parts": [user_input]
     })
 
-    # Sliding window
     if len(conversation_history) > 20:
         conversation_history = conversation_history[-20:]
 
-    # AUTO-RETRY WITH BACKOFF + MODEL FALLBACK
     max_retries = 3
     wait_times = [10, 20, 40]
 
@@ -97,18 +134,50 @@ Remember: You're not just an assistant, you're a friend.{memory_section}"""
                 label = f"🧠 Thinking (model: {model_name})..." if attempt == 0 else f"🧠 Retrying (attempt {attempt + 1}/{max_retries}, model: {model_name})..."
                 print(label)
 
-                # Build Groq messages format
                 messages = build_groq_messages(conversation_history, system_prompt)
 
-                response = client.chat.completions.create(
+                # ── STEP 1: Collect full response at full speed ──
+                stream = client.chat.completions.create(
                     model=model_name,
                     messages=messages,
                     max_tokens=300,
                     temperature=0.8,
+                    stream=True,
                 )
 
-                raw_response = response.choices[0].message.content.strip()
-                clean_response = clean_text_for_speech(raw_response)
+                full_response = ""
+                for chunk in stream:
+                    token = chunk.choices[0].delta.content
+                    if token:
+                        full_response += token
+
+                clean_response = clean_text_for_speech(full_response)
+
+                # ── STEP 2: Start TTS generation in background ──
+                tts_file, tts_ready = start_tts_generation(clean_response)
+
+                # ── STEP 3: Wait for TTS to be ready ──
+                tts_ready.wait(timeout=10)
+
+                # ── STEP 4: Start audio + display simultaneously ──
+                print("\n" + "=" * 60)
+                print("🤖 SAIYAARA:")
+
+                # Audio plays in background thread
+                audio_thread = threading.Thread(
+                    target=play_pregenerated,
+                    args=(tts_file, tts_ready),
+                    daemon=True
+                )
+                audio_thread.start()
+
+                # Display runs in main thread simultaneously
+                slow_display(clean_response)
+
+                print("=" * 60)
+
+                # Wait for audio to finish before returning
+                audio_thread.join()
 
                 conversation_history.append({
                     "role": "model",
@@ -142,3 +211,24 @@ Remember: You're not just an assistant, you're a friend.{memory_section}"""
     print("⚠️  All models exhausted. Daily quota finished across all models.")
     conversation_history.pop()
     return "I've used up all available models for today. Quota resets at midnight — let's continue then!", conversation_history
+
+
+# ===== TEST =====
+if __name__ == "__main__":
+    import os
+    from dotenv import load_dotenv
+    load_dotenv()
+
+    client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+    history = []
+
+    print("🧠 Brain Test — type a message, press Enter. Ctrl+C to quit.\n")
+    while True:
+        try:
+            user_input = input("You: ").strip()
+            if not user_input:
+                continue
+            response, history = think(user_input, history, client)
+        except KeyboardInterrupt:
+            print("\n👋 Test ended.")
+            break

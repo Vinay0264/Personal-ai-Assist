@@ -63,30 +63,71 @@ RULES:
 *** NEVER answer. NEVER explain. ONE line only. ***
 """
 
+VALID_FUNCS = [
+    "exit", "general", "realtime", "open", "close", "play",
+    "generate", "reminder", "system", "content", "google search", "youtube search"
+]
+
 
 def route(query):
     """
-    Takes user query and returns classification label + query.
-    Supports multi-task queries.
+    Streams the classification and returns a list of decisions.
+    e.g. "open YouTube and play Believer" → ["open youtube", "play believer"]
     """
     try:
-        response = co.chat(
+        print("🔀 Classifying", end="", flush=True)
+
+        full_response = ""
+
+        # Cohere V2 streaming — iterate directly, no 'with' block
+        for event in co.chat_stream(
             model="command-a-03-2025",
             messages=[
                 {"role": "system", "content": ROUTING_PROMPT},
                 {"role": "user", "content": query}
             ]
-        )
+        ):
+            if hasattr(event, 'type') and event.type == 'content-delta':
+                token = event.delta.message.content.text
+                full_response += token
+                print(".", end="", flush=True)
 
-        decision = response.message.content[0].text.strip().lower()
+        print()  # newline after dots
 
-        # Take only first line in case model adds extra text
-        decision = decision.split('\n')[0].strip()
+        # Parse into list — split multi-task by comma
+        decision_line = full_response.strip().lower().split('\n')[0].strip()
+        tasks = [t.strip() for t in decision_line.split(",") if t.strip()]
 
-        print(f"🔀 Router decision: {decision}")
-        return decision
+        # Filter to only valid classifications
+        valid_tasks = []
+        for task in tasks:
+            for func in VALID_FUNCS:
+                if task.startswith(func):
+                    valid_tasks.append(task)
+                    break
+
+        # Fallback if nothing valid found
+        if not valid_tasks:
+            valid_tasks = [f"general {query}"]
+
+        print(f"🔀 Router decision: {valid_tasks}")
+        return valid_tasks
 
     except Exception as e:
-        print(f"⚠️ Router error: {e} — defaulting to general")
-        return f"general {query}"
+        print(f"\n⚠️ Router error: {e} — defaulting to general")
+        return [f"general {query}"]
 
+
+# ===== TEST =====
+if __name__ == "__main__":
+    print("🔀 Router Test — type a query, press Enter. Ctrl+C to quit.\n")
+    while True:
+        try:
+            query = input("Query: ").strip()
+            if not query:
+                continue
+            result = route(query)
+            print(f"Result: {result}\n")
+        except KeyboardInterrupt:
+            print("\n👋 Test ended.")
+            break
