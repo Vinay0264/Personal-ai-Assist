@@ -213,11 +213,27 @@ def chat():
 
     print(f"🤖 SAIYAARA: {response}")
 
-    # ── Fire TTS after 80ms so browser gets response first ──
+    # ── Generate TTS file NOW, before sending HTTP response ──
+    # Browser gets text + TTS is already ready → play starts within ~50ms of text appearing
+    tts_file  = None
+    tts_ready = None
     if response:
-        fire_tts(response, delay=0.05)
+        try:
+            tts_file, tts_ready = start_tts_generation(response)
+            # Wait up to 8s for TTS file to be ready
+            tts_ready.wait(timeout=8)
+        except Exception as e:
+            print(f"⚠️  Pre-gen TTS error: {e}")
 
-    return jsonify({"response": response})
+    # ── Return text to browser ──
+    resp = jsonify({"response": response})
+
+    # ── Play TTS in background (file already generated, near-instant) ──
+    if tts_file and tts_ready:
+        t = threading.Thread(target=play_pregenerated, args=(tts_file, tts_ready), daemon=True)
+        t.start()
+
+    return resp
 
 
 @app.route('/voice', methods=['POST'])
@@ -267,32 +283,60 @@ def new_chat():
 @app.route('/delete_chat', methods=['POST'])
 def delete_chat():
     try:
-        data  = request.get_json()
-        # Accept direct file path (preferred) or fall back to index
-        file_path = data.get('path', '')
-        title     = data.get('title', '')
+        data      = request.get_json()
+        file_path = data.get('path', '').strip()
+        title     = data.get('title', '').strip()
 
-        # Try direct path first
+        print(f"\n🗑  Delete request — path={file_path!r}  title={title!r}")
+
+        # Normalise path separators (browser may send forward slashes on Windows)
+        if file_path:
+            file_path = os.path.normpath(file_path)
+
+        # Try 1: exact path
         if file_path and os.path.exists(file_path):
             os.remove(file_path)
-            print(f"🗑  Deleted: {file_path}")
+            print(f"✅ Deleted by path: {file_path}")
             return jsonify({"status": "deleted"})
 
-        # Fallback: search by title
+        # Try 2: path relative to BASE_DIR
+        if file_path:
+            rel = os.path.join(BASE_DIR, file_path)
+            rel = os.path.normpath(rel)
+            if os.path.exists(rel):
+                os.remove(rel)
+                print(f"✅ Deleted by relative path: {rel}")
+                return jsonify({"status": "deleted"})
+
+        # Try 3: search all chats by title
+        all_chats = load_recent_chats(limit=50)
+        print(f"   Searching {len(all_chats)} chats for title match...")
+        for c in all_chats:
+            c_title = c.get('title','').strip()
+            c_path  = c.get('path','')
+            print(f"   → {c_title!r}  {c_path!r}")
+            if c_title.lower() == title.lower() and c_path and os.path.exists(c_path):
+                os.remove(c_path)
+                print(f"✅ Deleted by title: {c_path}")
+                return jsonify({"status": "deleted"})
+
+        # Try 4: filename contains title slug
         if title:
-            all_chats = load_recent_chats(limit=20)
+            slug = title.lower().replace(' ', '-')
             for c in all_chats:
-                if c.get('title','').lower() == title.lower():
+                fname = os.path.basename(c.get('path','')).lower()
+                if slug in fname:
                     p = c.get('path','')
                     if p and os.path.exists(p):
                         os.remove(p)
-                        print(f"🗑  Deleted by title: {p}")
+                        print(f"✅ Deleted by slug: {p}")
                         return jsonify({"status": "deleted"})
 
-        print(f"⚠️  Delete: file not found — path={file_path!r} title={title!r}")
-        return jsonify({"status": "not_found"}), 404
+        print(f"❌ Delete: no match found for path={file_path!r} title={title!r}")
+        return jsonify({"status": "not_found", "tried_path": file_path, "tried_title": title}), 404
     except Exception as e:
         print(f"⚠️  Delete error: {e}")
+        import traceback; traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
 

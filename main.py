@@ -38,6 +38,24 @@ gemini_client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 conversation_history = []
 MAX_HISTORY = 20
 
+# ===== AUTOMATION TASK PREFIXES =====
+AUTOMATION_PREFIXES = ("open", "close", "play", "system", "media", "google search", "youtube search")
+
+# ===== MEDIA KEYWORDS — detected directly from user sentence =====
+# Router can't reliably classify pause/next/prev as automation, so we detect them here
+MEDIA_KEYWORDS = {
+    "pause":        "pause",
+    "resume":       "play",
+    "unpause":      "play",
+    "next song":    "next",
+    "next track":   "next",
+    "skip":         "next",
+    "previous song":"previous",
+    "prev song":    "previous",
+    "go back":      "previous",
+    "stop playing": "stop",
+}
+
 # ===== EXIT TRIGGERS =====
 EXIT_TRIGGERS = [
     "you can quit now",
@@ -145,9 +163,7 @@ def get_exit_message(user_lower):
 
 def handle_coming_soon(task):
     """Friendly response for features not yet built"""
-    if task.startswith("realtime"):
-        message = "Real-time search is coming soon! I'll be able to look things up on the internet for you."
-    elif task.startswith("open"):
+    if task.startswith("open"):
         message = "App opening is coming soon! I'll be able to open apps for you."
     elif task.startswith("close"):
         message = "App closing is coming soon! I'll be able to close apps for you."
@@ -213,7 +229,17 @@ def process_input(user_text):
     # ── ROUTE THE QUERY → returns a list ──
     tasks = route(user_text)
 
-    # ── LOOP THROUGH EACH TASK ──
+    # ── DETECT MEDIA COMMANDS DIRECTLY FROM USER SENTENCE ──
+    # Router can't reliably classify pause/next/prev as automation
+    media_task = None
+    for kw, action in MEDIA_KEYWORDS.items():
+        if kw in user_lower:
+            media_task = f"media {action}"
+            break
+
+    # ── SEPARATE: collect automation tasks, run all together in parallel ──
+    automation_tasks = []
+
     for task in tasks:
 
         if task == "exit":
@@ -224,16 +250,29 @@ def process_input(user_text):
                 user_text, conversation_history, groq_client
             )
 
-        elif task.startswith(("realtime", "open", "close", "play", "generate", "reminder", "system", "content", "google search", "youtube search")):
+        elif task.startswith("realtime"):
+            from backend.search import realtime_search
+            search_query = task[len("realtime"):].strip() or user_text
+            realtime_search(
+                query=search_query,
+                groq_client=groq_client,
+                clean_text_fn=clean_text_for_speech,
+                speak_fn=speak,
+                slow_display_fn=slow_display,
+                start_tts_fn=start_tts_generation,
+                play_pregenerated_fn=play_pregenerated,
+            )
+
+        elif task.startswith(AUTOMATION_PREFIXES):
+            automation_tasks.append(task)
+
+        elif task.startswith(("generate", "reminder", "content")):
             handle_coming_soon(task)
 
         else:
-            # Fallback — treat as general
             ai_response, conversation_history = think(
                 user_text, conversation_history, groq_client
             )
-
-    return False
 
 
 def main():

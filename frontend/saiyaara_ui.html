@@ -38,27 +38,27 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
 @keyframes spinCCW{from{transform:rotate(0);}to{transform:rotate(-360deg);}}
 @keyframes dotPulse{0%,100%{transform:scale(1);opacity:1;}50%{transform:scale(1.5);opacity:0.6;}}
 .logo-text{font-family:'Orbitron',monospace;font-size:13px;font-weight:900;letter-spacing:3px;color:var(--accent);text-shadow:var(--glow);}
-.logo-sub{font-size:9px;letter-spacing:2px;color:var(--text-dim);font-family:'Share Tech Mono',monospace;margin-top:2px;}
+.logo-sub{font-size:10px;letter-spacing:2px;color:var(--text-dim);font-family:'Share Tech Mono',monospace;margin-top:2px;}
 .s-clock{padding:12px 14px;border-bottom:1px solid var(--border);}
 .clock-time{font-family:'Share Tech Mono',monospace;font-size:26px;color:var(--accent);text-shadow:var(--glow);letter-spacing:2px;line-height:1;}
-.clock-date{font-size:10px;color:var(--text-dim);letter-spacing:2px;margin-top:3px;font-family:'Share Tech Mono',monospace;text-transform:uppercase;}
+.clock-date{font-size:11px;color:var(--text-dim);letter-spacing:2px;margin-top:3px;font-family:'Share Tech Mono',monospace;text-transform:uppercase;}
 .s-weather{padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;}
 .w-icon{font-size:26px;filter:drop-shadow(0 0 5px rgba(0,212,255,0.4));}
 .w-info{flex:1;}
 .w-temp{font-family:'Orbitron',monospace;font-size:18px;color:var(--accent);font-weight:600;}
-.w-desc{font-size:11px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;}
-.w-loc{font-size:9px;color:var(--text-mute);letter-spacing:1px;margin-top:2px;font-family:'Share Tech Mono',monospace;}
+.w-desc{font-size:12px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;}
+.w-loc{font-size:11px;color:var(--text-mute);letter-spacing:1px;margin-top:2px;font-family:'Share Tech Mono',monospace;}
 .s-status{padding:8px 14px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:5px;}
-.st-row{display:flex;align-items:center;justify-content:space-between;font-size:11px;letter-spacing:1px;text-transform:uppercase;}
+.st-row{display:flex;align-items:center;justify-content:space-between;font-size:12px;letter-spacing:1px;text-transform:uppercase;}
 .st-label{color:var(--text-dim);}
-.st-val{font-family:'Share Tech Mono',monospace;font-size:11px;display:flex;align-items:center;gap:4px;}
+.st-val{font-family:'Share Tech Mono',monospace;font-size:12px;display:flex;align-items:center;gap:4px;}
 .st-val.on{color:var(--accent3);}
 .st-val.active{color:var(--accent);}
 .st-dot{width:6px;height:6px;border-radius:50%;animation:blinkDot 2s ease-in-out infinite;flex-shrink:0;}
 .st-dot.g{background:var(--accent3);box-shadow:0 0 6px var(--accent3);}
 .st-dot.b{background:var(--accent);box-shadow:0 0 6px var(--accent);}
 @keyframes blinkDot{0%,100%{opacity:1;}50%{opacity:0.3;}}
-.s-sec-title{padding:8px 14px 4px;font-size:9px;letter-spacing:3px;color:var(--text-mute);text-transform:uppercase;font-family:'Share Tech Mono',monospace;display:flex;align-items:center;gap:6px;}
+.s-sec-title{padding:8px 14px 4px;font-size:11px;letter-spacing:3px;color:var(--text-mute);text-transform:uppercase;font-family:'Share Tech Mono',monospace;display:flex;align-items:center;gap:6px;}
 .s-sec-title::after{content:'';flex:1;height:1px;background:var(--border);}
 .chat-list{flex:1;overflow-y:auto;padding:0 6px 6px;}
 .chat-list::-webkit-scrollbar{width:2px;}
@@ -68,7 +68,7 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
 .chat-item.active{background:rgba(0,212,255,0.07);border-color:rgba(0,212,255,0.25);}
 .chat-item.active::before{content:'';position:absolute;left:0;top:0;width:2px;height:100%;background:var(--accent);box-shadow:0 0 6px var(--accent);}
 .chat-item-header{display:flex;align-items:center;justify-content:space-between;gap:4px;}
-.chat-title{font-size:11px;color:var(--text);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;}
+.chat-title{font-size:12px;color:var(--text);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;}
 .chat-item.active .chat-title{color:var(--accent);}
 .chat-date{font-size:9px;color:var(--text-mute);font-family:'Share Tech Mono',monospace;}
 .chat-messages-preview{max-height:0;overflow:hidden;transition:max-height 0.35s ease;}
@@ -126,6 +126,15 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
   pointer-events:none;
 }
 #jarvis-ring.show{opacity:1;}
+/* Idle ring — always visible at very low opacity */
+#jarvis-ring.idle{opacity:0.45;}
+#jarvis-ring.idle .jr-r1{animation-duration:8s;border-top-color:rgba(0,212,255,0.4);}
+#jarvis-ring.idle .jr-r2{animation-duration:14s;border-bottom-color:rgba(0,212,255,0.2);}
+#jarvis-ring.idle .jr-r3{animation-duration:20s;}
+#jarvis-ring.idle .jr-r4{animation-duration:30s;}
+#jarvis-ring.idle .jr-core-ring{border-color:rgba(0,212,255,0.15);box-shadow:none;}
+#jarvis-ring.idle .jr-core-inner{background:none;}
+#jarvis-ring.idle .jr-bar{animation:none;height:3px !important;background:rgba(0,212,255,0.25);}
 
 .jr-r1{position:absolute;width:260px;height:260px;border-radius:50%;border:2px solid transparent;border-top-color:var(--accent);border-right-color:rgba(0,212,255,0.25);animation:spinCW 2s linear infinite;}
 .jr-r2{position:absolute;width:210px;height:210px;border-radius:50%;border:1.5px solid transparent;border-bottom-color:var(--accent2);border-left-color:rgba(0,128,255,0.35);animation:spinCCW 3.2s linear infinite;opacity:0.75;}
@@ -150,14 +159,23 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
 #jarvis-ring.listening .jr-core-ring{border-color:rgba(0,212,255,0.55);box-shadow:0 0 30px rgba(0,212,255,0.2);}
 #jarvis-ring.listening .jr-core-inner{background:radial-gradient(circle,rgba(0,212,255,0.15) 0%,transparent 70%);}
 
-/* SPEAKING — gold + blue */
-#jarvis-ring.speaking .jr-r1{border-top-color:var(--gold);border-right-color:rgba(240,165,0,0.3);animation-duration:1s;}
-#jarvis-ring.speaking .jr-r2{border-bottom-color:var(--gold);animation-duration:1.6s;}
+/* THINKING — amber pulse, slow spin */
+#jarvis-ring.thinking .jr-r1{border-top-color:#f0a500;border-right-color:rgba(240,165,0,0.2);animation-duration:3s;}
+#jarvis-ring.thinking .jr-r2{border-bottom-color:rgba(240,165,0,0.4);animation-duration:5s;}
+#jarvis-ring.thinking .jr-r3{border-color:rgba(240,165,0,0.12);animation-duration:10s;}
+#jarvis-ring.thinking .jr-core-ring{border-color:rgba(240,165,0,0.45);box-shadow:0 0 28px rgba(240,165,0,0.15);}
+#jarvis-ring.thinking .jr-core-inner{background:radial-gradient(circle,rgba(240,165,0,0.08) 0%,transparent 70%);}
+#jarvis-ring.thinking .jr-label{color:#f0a500;}
+#jarvis-ring.thinking .jr-bar{background:#f0a500;animation-duration:0.6s;}
+
+/* SPEAKING — blue pulse, fast spin */
+#jarvis-ring.speaking .jr-r1{border-top-color:var(--accent2);border-right-color:rgba(0,128,255,0.3);animation-duration:1s;}
+#jarvis-ring.speaking .jr-r2{border-bottom-color:var(--accent2);animation-duration:1.6s;}
 #jarvis-ring.speaking .jr-r3{animation-duration:4s;}
-#jarvis-ring.speaking .jr-core-ring{border-color:rgba(240,165,0,0.5);box-shadow:0 0 35px rgba(240,165,0,0.18),0 0 12px rgba(0,128,255,0.2);}
-#jarvis-ring.speaking .jr-core-inner{background:radial-gradient(circle,rgba(240,165,0,0.1) 0%,transparent 70%);}
-#jarvis-ring.speaking .jr-label{color:var(--gold);}
-#jarvis-ring.speaking .jr-bar{background:var(--gold);animation-duration:0.28s;}
+#jarvis-ring.speaking .jr-core-ring{border-color:rgba(0,128,255,0.55);box-shadow:0 0 35px rgba(0,128,255,0.22),0 0 12px rgba(0,212,255,0.2);}
+#jarvis-ring.speaking .jr-core-inner{background:radial-gradient(circle,rgba(0,128,255,0.12) 0%,transparent 70%);}
+#jarvis-ring.speaking .jr-label{color:var(--accent2);}
+#jarvis-ring.speaking .jr-bar{background:var(--accent2);animation-duration:0.28s;}
 
 /* ─── CHAT AREA — sits on top of ring, transparent bg ─── */
 #chat-area{
@@ -170,11 +188,11 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
   /* semi-transparent so ring shows through BUT text is readable */
   background:transparent;
 }
-/* when chatting, add a subtle dark wash over the ring so text stays legible */
+/* when chatting, subtle wash — low enough that idle ring shows through */
 #chat-area.has-messages{
   background:linear-gradient(to bottom,
-    rgba(2,6,9,0.55) 0%,
-    rgba(2,6,9,0.55) 100%
+    rgba(2,6,9,0.30) 0%,
+    rgba(2,6,9,0.30) 100%
   );
 }
 #chat-area::-webkit-scrollbar{width:3px;}
@@ -234,7 +252,7 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
 #right-panel::before{content:'';position:absolute;top:0;left:0;width:1px;height:100%;background:linear-gradient(180deg,transparent,var(--accent),transparent);opacity:0.3;animation:scanV 5s ease-in-out infinite;animation-delay:2.5s;}
 .rp-header{padding:16px 14px 10px;border-bottom:1px solid var(--border);font-family:'Orbitron',monospace;font-size:10px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;}
 .rp-sec{border-bottom:1px solid var(--border);}
-.rp-sec-title{padding:8px 14px;display:flex;align-items:center;justify-content:space-between;font-size:9px;letter-spacing:2px;color:var(--text-dim);text-transform:uppercase;font-family:'Share Tech Mono',monospace;cursor:pointer;transition:color 0.2s;user-select:none;}
+.rp-sec-title{padding:8px 14px;display:flex;align-items:center;justify-content:space-between;font-size:11px;letter-spacing:2px;color:var(--text-dim);text-transform:uppercase;font-family:'Share Tech Mono',monospace;cursor:pointer;transition:color 0.2s;user-select:none;}
 .rp-sec-title:hover{color:var(--accent);}
 .rp-sec-count{font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--accent3);background:rgba(0,255,136,0.08);padding:1px 6px;border-radius:10px;letter-spacing:0;}
 /* toggle arrow */
@@ -244,16 +262,16 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
 .fact-list{padding:0 10px 8px;display:flex;flex-direction:column;gap:4px;overflow-y:auto;max-height:220px;}
 .fact-list::-webkit-scrollbar{width:2px;}
 .fact-list::-webkit-scrollbar-thumb{background:var(--border);}
-.fact-item{padding:5px 8px;background:rgba(0,255,136,0.03);border:1px solid rgba(0,255,136,0.1);border-radius:2px;font-size:11px;color:var(--text);line-height:1.4;display:flex;align-items:flex-start;gap:6px;}
+.fact-item{padding:5px 8px;background:rgba(0,255,136,0.03);border:1px solid rgba(0,255,136,0.1);border-radius:2px;font-size:12px;color:var(--text);line-height:1.4;display:flex;align-items:flex-start;gap:6px;}
 .fact-bullet{color:var(--accent3);flex-shrink:0;}
 .fact-text{flex:1;}
 .no-facts{padding:10px 8px;font-size:10px;color:var(--text-mute);letter-spacing:1px;text-align:center;font-family:'Share Tech Mono',monospace;}
 .stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:8px 10px;}
 .stat-box{background:rgba(0,212,255,0.03);border:1px solid var(--border);border-radius:2px;padding:6px 8px;text-align:center;}
 .stat-val{font-family:'Orbitron',monospace;font-size:16px;color:var(--accent);font-weight:600;line-height:1;}
-.stat-lbl{font-size:9px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;margin-top:2px;font-family:'Share Tech Mono',monospace;}
+.stat-lbl{font-size:11px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;margin-top:2px;font-family:'Share Tech Mono',monospace;}
 .qc-list{padding:6px 10px 10px;display:flex;flex-direction:column;gap:4px;}
-.qc-chip{padding:5px 10px;background:rgba(0,212,255,0.03);border:1px solid var(--border);border-radius:2px;font-size:11px;color:var(--text-dim);cursor:pointer;transition:all 0.15s;letter-spacing:0.5px;font-family:'Share Tech Mono',monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.qc-chip{padding:5px 10px;background:rgba(0,212,255,0.03);border:1px solid var(--border);border-radius:2px;font-size:12px;color:var(--text-dim);cursor:pointer;transition:all 0.15s;letter-spacing:0.5px;font-family:'Share Tech Mono',monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .qc-chip:hover{border-color:var(--accent);color:var(--accent);background:rgba(0,212,255,0.06);}
 
 /* ═══ MODAL ═══ */
@@ -473,12 +491,20 @@ async function fetchW(lat,lon){
   }
 }
 function initW(){
+  document.getElementById('w-loc').textContent='Locating...';
   if(navigator.geolocation){
     navigator.geolocation.getCurrentPosition(
       p=>fetchW(p.coords.latitude,p.coords.longitude),
-      ()=>fetchW(17.827,83.2186)
+      ()=>{
+        // Permission denied or unavailable — use default coords
+        // Nominatim will still reverse-geocode these to real name
+        fetchW(17.827,83.2186);
+      },
+      {timeout:8000, maximumAge:300000}
     );
-  }else fetchW(17.827,83.2186);
+  }else{
+    fetchW(17.827,83.2186);
+  }
 }
 initW();setInterval(initW,10*60*1000);
 
@@ -497,6 +523,9 @@ async function loadMem(){
   try{const r=await fetch(`${SRV}/memory`);const d=await r.json();renderMem(d.facts||[]);}catch{}
 }
 
+// Track if user manually closed memory tab — never auto-reopen after that
+let memUserClosed = false;
+
 function renderMem(facts){
   const list=document.getElementById('fact-list');
   const badge=document.getElementById('mem-badge');
@@ -510,11 +539,15 @@ function renderMem(facts){
     el.innerHTML=`<span class="fact-bullet">›</span><span class="fact-text">${esc(f)}</span>`;
     list.appendChild(el);
   });
-  // auto-open if has facts
-  const body=document.getElementById('mem-body');
-  const arrow=document.getElementById('mem-arrow');
-  body.classList.add('open');
-  if(arrow)arrow.style.transform='rotate(90deg)';
+  // Only auto-open on very first load, never if user closed it
+  if(!memUserClosed){
+    const body=document.getElementById('mem-body');
+    const arrow=document.getElementById('mem-arrow');
+    if(body && !body.classList.contains('open')){
+      body.classList.add('open');
+      if(arrow)arrow.style.transform='rotate(90deg)';
+    }
+  }
 }
 
 async function loadHistory(){
@@ -546,9 +579,12 @@ function toggleRp(bodyId, arrowId){
   if(isOpen){
     body.classList.remove('open');
     if(arrow) arrow.style.transform='rotate(0deg)';
+    // Mark memory as user-closed so loadMem never auto-reopens it
+    if(bodyId==='mem-body') memUserClosed=true;
   } else {
     body.classList.add('open');
     if(arrow) arrow.style.transform='rotate(90deg)';
+    if(bodyId==='mem-body') memUserClosed=false;
   }
 }
 
@@ -566,6 +602,9 @@ function renderList(data){
 
 function buildItem(c,i){
   const el=document.createElement('div');el.className='chat-item';
+  // Store path and title directly on element for reliable delete
+  el.dataset.path=c.path||'';
+  el.dataset.title=c.title||'';
   let prev='';
   if(c.messages&&c.messages.length){
     const last=c.messages[c.messages.length-1];
@@ -610,17 +649,30 @@ function askDel(i){
 function closeModal(){document.getElementById('del-modal').classList.remove('show');delTarget=null;}
 async function confirmDelete(){
   if(delTarget===null)return;
-  const chat=chats[delTarget];
-  if(online && chat){
+  const items=document.querySelectorAll('.chat-item');
+  const el=items[delTarget];
+  const filePath=el?el.dataset.path:'';
+  const fileTitle=el?el.dataset.title:'';
+  console.log('Deleting — path:',filePath,'title:',fileTitle);
+
+  let deleted=false;
+  if(online){
     try{
-      await fetch(`${SRV}/delete_chat`,{
+      const res=await fetch(`${SRV}/delete_chat`,{
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({path: chat.path || '', title: chat.title || ''})
+        body:JSON.stringify({path:filePath, title:fileTitle})
       });
+      const d=await res.json();
+      console.log('Delete result:',d);
+      deleted=(d.status==='deleted');
     }catch(e){console.error('Delete error',e);}
   }
-  chats.splice(delTarget,1);renderList(chats);closeModal();
+
+  closeModal();
+
+  // Always reload from server so list is accurate
+  await loadHistory();
 }
 
 // ── STATUS ──
@@ -651,11 +703,12 @@ function setStatus(state){
   if(state==='listening'){vDot.className='st-dot g';vTxt.textContent='ACTIVE';vSt.className='st-val on';}
   else{vDot.className='st-dot b';vTxt.textContent='READY';vSt.className='st-val active';}
 
-  // ring
-  ring.classList.remove('listening','speaking');
-  if(state==='listening'||state==='thinking'){ring.classList.add('show','listening');}
+  // ring — always show something
+  ring.classList.remove('idle','listening','thinking','speaking','show');
+  if(state==='listening'){ring.classList.add('show','listening');}
+  else if(state==='thinking'){ring.classList.add('show','thinking');}
   else if(state==='speaking'){ring.classList.add('show','speaking');}
-  else{ring.classList.remove('show');}
+  else{ring.classList.add('idle');}  // ready → dim idle ring always visible
 }
 
 function showTyping(show){
@@ -729,9 +782,23 @@ function onTyping(){
   const txt=document.getElementById('msg-input').value.trim();
   if(txt.length>0){
     const r=document.getElementById('jarvis-ring');
-    if(!r.classList.contains('speaking'))setStatus('listening');
+    // Show listening whenever user is typing — regardless of message state
+    if(!r.classList.contains('speaking') && !r.classList.contains('thinking')){
+      setStatus('listening');
+    }
+    // Hide welcome screen as soon as typing starts
+    const wlc=document.getElementById('welcome');
+    if(wlc && wlc.style.display!=='none') wlc.style.display='none';
     clearTimeout(typingTimer);
-    typingTimer=setTimeout(()=>{if(!document.getElementById('jarvis-ring').classList.contains('speaking'))setStatus('ready');},1800);
+    typingTimer=setTimeout(()=>{
+      const ring=document.getElementById('jarvis-ring');
+      if(!ring.classList.contains('speaking')&&!ring.classList.contains('thinking'))setStatus('ready');
+    },1800);
+  } else {
+    // Input cleared — go back to idle/ready if not busy
+    clearTimeout(typingTimer);
+    const ring=document.getElementById('jarvis-ring');
+    if(!ring.classList.contains('speaking')&&!ring.classList.contains('thinking'))setStatus('ready');
   }
 }
 function handleKey(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();}}
@@ -753,14 +820,12 @@ async function sendToBE(text){
     const d=await r.json();
     showTyping(false);
     if(d.response){
-      // Switch to speaking ring THEN typewrite simultaneously
-      // TTS is already playing on server side in background thread
       setStatus('speaking');
       await addMsg('saiyaara', d.response, true, true);  // typewriter ON
-      // Keep speaking ring alive for remaining TTS duration after typing ends
-      const remaining=Math.max(500, d.response.split(' ').length * 200);
-      setTimeout(()=>setStatus('ready'), remaining);
+      setStatus('ready');
       setTimeout(loadMem, 1500);
+      // Refresh chat list in sidebar so newly saved chats appear
+      setTimeout(loadHistory, 2000);
     }
   }catch{
     showTyping(false);
@@ -804,7 +869,11 @@ function newChat(){
   document.getElementById('session-title').textContent='// NEW SESSION';
   document.querySelectorAll('.chat-item').forEach(el=>el.classList.remove('active'));
   setStatus('ready');sessionStart=Date.now();
-  if(online)fetch(`${SRV}/new_chat`,{method:'POST'}).catch(()=>{});
+  if(online){
+    fetch(`${SRV}/new_chat`,{method:'POST'})
+      .then(()=>setTimeout(loadHistory, 1500))  // refresh after server saves
+      .catch(()=>{});
+  }
 }
 
 function quickCmd(t){document.getElementById('msg-input').value=t;sendMessage();}

@@ -11,7 +11,7 @@ import pygame
 async def _generate_speech(text, output_file):
     """Generate speech using edge-tts and save to file"""
     voice = "en-US-JennyNeural"
-    communicate = edge_tts.Communicate(text, voice)
+    communicate = edge_tts.Communicate(text, voice, pitch="+5Hz", rate="+13%")
     await communicate.save(output_file)
 
 
@@ -30,8 +30,16 @@ def speak(text, display=True):
     Speak text using Edge-TTS + pygame.
     display=True → print text to terminal (for greetings/coming-soon messages)
     display=False → text already streamed by brain.py, just play audio
+
+    Long response handling: if text has more than 4 sentences and 250+ chars,
+    speak only the first 2 sentences to avoid walls of audio.
     """
     temp_filename = None
+
+    # ── LONG RESPONSE TRUNCATION (borrowed from Shreshth's approach) ──
+    sentences = [s.strip() for s in text.split('.') if s.strip()]
+    if len(sentences) > 4 and len(text) >= 250:
+        text = '. '.join(sentences[:2]) + '. I\'ve sent the rest to your screen, sir.'
 
     try:
         temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.mp3')

@@ -1,7 +1,6 @@
 import re
 import time
 import threading
-
 from groq import Groq
 from backend.chat_history import build_memory_prompt
 from backend.tts import start_tts_generation, play_pregenerated
